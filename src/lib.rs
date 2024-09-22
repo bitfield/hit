@@ -1,19 +1,112 @@
 use rand::Rng;
+use ratatui::{
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    layout::{Alignment, Constraint, Layout},
+    style::Stylize,
+    text::Line,
+    widgets::{block::Title, Block, Paragraph, Widget},
+    DefaultTerminal, Frame,
+};
 use std::{
     fmt::Display,
     io::{self, Write},
 };
 
-#[derive(Default)]
+#[derive(PartialEq)]
+enum State {
+    Start,
+    Playing,
+    End,
+}
+
 pub struct Game {
     player: Hand,
     dealer: Hand,
+    running: bool,
+    state: State,
+    message: Line<'static>,
+}
+
+impl Default for Game {
+    fn default() -> Self {
+        Self {
+            player: Hand::default(),
+            dealer: Hand::default(),
+            running: true,
+            state: State::Start,
+            message: Line::from(""),
+        }
+    }
 }
 
 impl Game {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+        while self.running {
+            self.update_state();
+            terminal.draw(|frame| self.draw(frame))?;
+            if 1 == 0 {
+                self.running = false;
+            }
+            self.handle_events()?;
+        }
+        Ok(())
+    }
+
+    fn handle_events(&mut self) -> io::Result<()> {
+        match event::read()? {
+            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                self.handle_key_event(key_event);
+            }
+            _ => {}
+        };
+        Ok(())
+    }
+
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('q') => self.running = false,
+            _ if self.state == State::End => self.state = State::Start,
+            KeyCode::Char('h') => self.hit(),
+            KeyCode::Char('s') => self.stand(),
+            _ => {}
+        }
+    }
+
+    fn update_state(&mut self) {
+        self.state = match self.state {
+            State::Start => {
+                self.new_deal();
+                self.message = Line::from(vec![
+                    "<H>".yellow().bold(),
+                    "it, ".into(),
+                    "<S>".yellow().bold(),
+                    "tand, or ".into(),
+                    "<Q>".yellow().bold(),
+                    " to quit".into(),
+                ]);
+                State::Playing
+            }
+            State::End => {
+                let result = self.round_result();
+                self.message = Line::from(vec![
+                    result.to_string().into(),
+                    " Press any key to continue, or ".into(),
+                    "<Q>".yellow().bold(),
+                    " to quit".into(),
+                ]);
+                State::End
+            }
+            _ => State::Playing,
+        };
+    }
+
+    fn draw(&self, frame: &mut Frame) {
+        frame.render_widget(self, frame.area());
     }
 
     pub fn cli(&mut self) {
@@ -33,13 +126,7 @@ impl Game {
             }
 
             println!("Dealer: {}", self.dealer);
-            match self.round_result() {
-                RoundResult::PlayerBust => println!("Bust!"),
-                RoundResult::DealerBust => println!("Dealer bust, you win!"),
-                RoundResult::PlayerWins => println!("You win!"),
-                RoundResult::DealerWins => println!("Dealer wins!"),
-                RoundResult::Tie => println!("It's a tie!"),
-            }
+            println!("{}", self.round_result());
             if !play_again() {
                 println!("Y'all come back real soon!");
                 return;
@@ -54,6 +141,22 @@ impl Game {
         self.player.push(deal());
         self.dealer.push(deal());
         self.dealer.push(deal());
+    }
+
+    fn hit(&mut self) {
+        self.player.push(deal());
+        match self.player.total() {
+            21 => self.stand(),
+            22.. => self.state = State::End,
+            _ => {},
+        }
+    }
+
+    fn stand(&mut self) {
+        while self.dealer.total() <= 16 {
+            self.dealer.push(deal());
+        }
+        self.state = State::End;
     }
 
     fn round_result(&self) -> RoundResult {
@@ -73,12 +176,53 @@ impl Game {
     }
 }
 
+impl Widget for &Game {
+    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
+    where
+        Self: Sized,
+    {
+        let title = Title::from(" Blackjack ".bold());
+        let block = Block::new().title(title.alignment(Alignment::Center));
+        let window = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Min(1),
+        ]);
+        let [dealer_hand_area, player_hand_area, message_area] = window.areas(block.inner(area));
+        Paragraph::new(self.dealer.to_string())
+            .block(Block::bordered().title(Title::from("Dealer").alignment(Alignment::Center)))
+            .alignment(Alignment::Center)
+            .render(dealer_hand_area, buf);
+        Paragraph::new(self.player.to_string())
+            .block(Block::bordered().title(Title::from("Player").alignment(Alignment::Center)))
+            .alignment(Alignment::Center)
+            .render(player_hand_area, buf);
+        Paragraph::new(self.message.clone())
+            .alignment(Alignment::Center)
+            .render(message_area, buf);
+        block.render(area, buf);
+    }
+}
+
 enum RoundResult {
     PlayerBust,
     DealerWins,
     DealerBust,
     PlayerWins,
     Tie,
+}
+
+impl Display for RoundResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let result_str = match self {
+            RoundResult::PlayerBust => "Bust!",
+            RoundResult::DealerBust => "Dealer bust, you win!",
+            RoundResult::PlayerWins => "You win!",
+            RoundResult::DealerWins => "Dealer wins!",
+            RoundResult::Tie => "It's a tie!",
+        };
+        write!(f, "{result_str}")
+    }
 }
 
 #[derive(Copy, Clone)]
