@@ -13,28 +13,41 @@ use std::{
 };
 
 #[derive(PartialEq)]
-enum State {
+enum Phase {
     Start,
     Playing,
-    End,
+    Result,
+    Quit,
 }
 
 pub struct Game {
     player: Hand,
     dealer: Hand,
-    running: bool,
-    state: State,
-    message: Line<'static>,
+    hand_done: bool,
 }
+
+pub struct Tui {
+    phase: Phase,
+    message: Line<'static>,
+    game: Game,
+}
+
+impl Default for Tui {
+    fn default() -> Self {
+        Self {
+            phase: Phase::Start,
+            message: Line::from(""),
+            game: Game::default(),
+        }
+    }
+} 
 
 impl Default for Game {
     fn default() -> Self {
         Self {
             player: Hand::default(),
             dealer: Hand::default(),
-            running: true,
-            state: State::Start,
-            message: Line::from(""),
+            hand_done: false,
         }
     }
 }
@@ -44,94 +57,9 @@ impl Game {
     pub fn new() -> Self {
         Self::default()
     }
-
-    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        while self.running {
-            self.update_state();
-            terminal.draw(|frame| self.draw(frame))?;
-            self.handle_events()?;
-        }
-        Ok(())
-    }
-
-    fn handle_events(&mut self) -> io::Result<()> {
-        match event::read()? {
-            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event);
-            }
-            _ => {}
-        };
-        Ok(())
-    }
-
-    fn handle_key_event(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('q') => self.running = false,
-            _ if self.state == State::End => self.state = State::Start,
-            KeyCode::Char('h') => self.hit(),
-            KeyCode::Char('s') => self.stand(),
-            _ => {}
-        }
-    }
-
-    fn update_state(&mut self) {
-        self.state = match self.state {
-            State::Start => {
-                self.new_deal();
-                self.message = Line::from(vec![
-                    "<H>".yellow().bold(),
-                    "it, ".into(),
-                    "<S>".yellow().bold(),
-                    "tand, or ".into(),
-                    "<Q>".yellow().bold(),
-                    " to quit".into(),
-                ]);
-                State::Playing
-            }
-            State::End => {
-                let result = self.round_result();
-                self.message = Line::from(vec![
-                    result.to_string().into(),
-                    " Press any key to continue, or ".into(),
-                    "<Q>".yellow().bold(),
-                    " to quit".into(),
-                ]);
-                State::End
-            }
-            _ => State::Playing,
-        };
-    }
-
-    fn draw(&self, frame: &mut Frame) {
-        frame.render_widget(self, frame.area());
-    }
-
-    pub fn cli(&mut self) {
-        loop {
-            self.new_deal();
-            println!("Dealer: {}", self.dealer);
-            println!("Player: {}", self.player);
-            while self.player.total() < 21 {
-                match prompt_for_action() {
-                    Action::Hit => self.player.push(deal()),
-                    Action::Stand => break,
-                }
-                println!("Player: {}", self.player);
-            }
-            while self.dealer.total() <= 16 {
-                self.dealer.push(deal());
-            }
-
-            println!("Dealer: {}", self.dealer);
-            println!("{}", self.round_result());
-            if !play_again() {
-                println!("Y'all come back real soon!");
-                return;
-            }
-        }
-    }
-
+   
     fn new_deal(&mut self) {
+        self.hand_done = false;
         self.player = Hand::new();
         self.dealer = Hand::new();
         self.player.push(deal());
@@ -144,7 +72,7 @@ impl Game {
         self.player.push(deal());
         match self.player.total() {
             21 => self.stand(),
-            22.. => self.state = State::End,
+            22.. => self.hand_done = true,
             _ => {},
         }
     }
@@ -153,7 +81,7 @@ impl Game {
         while self.dealer.total() <= 16 {
             self.dealer.push(deal());
         }
-        self.state = State::End;
+        self.hand_done = true;
     }
 
     fn round_result(&self) -> RoundResult {
@@ -171,9 +99,108 @@ impl Game {
             RoundResult::Tie
         }
     }
+
+
+
 }
 
-impl Widget for &Game {
+impl Tui {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+        loop {
+        match self.phase {
+            Phase::Quit => return Ok(()),
+            Phase::Start => {
+                self.game.new_deal();
+                self.message = Line::from(vec![
+                    "<H>".yellow().bold(),
+                    "it, ".into(),
+                    "<S>".yellow().bold(),
+                    "tand, or ".into(),
+                    "<Q>".yellow().bold(),
+                    " to quit".into(),
+                ]);
+                self.phase = Phase::Playing;
+            }
+            Phase::Playing => {
+                if self.game.hand_done {
+
+                self.message = Line::from("hand done");
+                    self.phase = Phase::Result;
+                }
+            }
+            Phase::Result => {
+                let result = self.game.round_result();
+                self.message = Line::from(vec![
+                    result.to_string().into(),
+                    " Press any key to continue, or ".into(),
+                    "<Q>".yellow().bold(),
+                    " to quit".into(),
+                ]);
+            }
+        };
+            terminal.draw(|frame| self.draw(frame))?;
+            self.handle_events()?;
+        }
+    }
+
+    fn handle_events(&mut self) -> io::Result<()> {
+        match event::read()? {
+            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                self.handle_key_event(key_event);
+            }
+            _ => {}
+        };
+        Ok(())
+    }
+
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('q') => self.phase = Phase::Quit,
+            KeyCode::Char('r') => {},
+            _ if self.phase == Phase::Result => self.phase = Phase::Start,
+            KeyCode::Char('h') => self.game.hit(),
+            KeyCode::Char('s') => self.game.stand(),
+            _ => {}
+        }
+    }
+
+    fn draw(&self, frame: &mut Frame) {
+        frame.render_widget(self, frame.area());
+    }
+
+    pub fn cli(&mut self) {
+        loop {
+            self.game.new_deal();
+            println!("Dealer: {}", self.game.dealer);
+            println!("Player: {}", self.game.player);
+            while self.game.player.total() < 21 {
+                match prompt_for_action() {
+                    Action::Hit => self.game.player.push(deal()),
+                    Action::Stand => break,
+                }
+                println!("Player: {}", self.game.player);
+            }
+            while self.game.dealer.total() <= 16 {
+                self.game.dealer.push(deal());
+            }
+
+            println!("Dealer: {}", self.game.dealer);
+            println!("{}", self.game.round_result());
+            if !play_again() {
+                println!("Y'all come back real soon!");
+                return;
+            }
+        }
+    }
+
+ }
+
+impl Widget for &Tui {
     fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
     where
         Self: Sized,
@@ -186,11 +213,11 @@ impl Widget for &Game {
             Constraint::Min(1),
         ]);
         let [dealer_hand_area, player_hand_area, message_area] = window.areas(block.inner(area));
-        Paragraph::new(self.dealer.to_string())
+        Paragraph::new(self.game.dealer.to_string())
             .block(Block::bordered().title(Title::from("Dealer").alignment(Alignment::Center)))
             .alignment(Alignment::Center)
             .render(dealer_hand_area, buf);
-        Paragraph::new(self.player.to_string())
+        Paragraph::new(self.game.player.to_string())
             .block(Block::bordered().title(Title::from("Player").alignment(Alignment::Center)))
             .alignment(Alignment::Center)
             .render(player_hand_area, buf);
@@ -291,4 +318,14 @@ fn get_player_input(prompt: &'static str) -> String {
     io::stdout().flush().unwrap();
     io::stdin().read_line(&mut choice).unwrap();
     choice.trim_end().to_string()
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hint() {
+    }
 }
