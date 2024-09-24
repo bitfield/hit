@@ -49,9 +49,6 @@ impl Game {
         while self.running {
             self.update_state();
             terminal.draw(|frame| self.draw(frame))?;
-            if 1 == 0 {
-                self.running = false;
-            }
             self.handle_events()?;
         }
         Ok(())
@@ -181,7 +178,7 @@ impl Widget for &Game {
     where
         Self: Sized,
     {
-        let title = Title::from(" Blackjack ".bold());
+        let title = Title::from(" Blackjack! ".bold());
         let block = Block::new().title(title.alignment(Alignment::Center));
         let window = Layout::vertical([
             Constraint::Length(3),
