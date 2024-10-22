@@ -1,27 +1,33 @@
-use std::fmt::Display;
-
-use rand::Rng;
+use std::{
+    collections::{hash_set::IntoIter, HashSet},
+    fmt::Display,
+};
 
 #[derive(Default)]
 pub struct Game {
     pub player: Hand,
     pub dealer: Hand,
     pub hand_done: bool,
+    deck: Deck,
 }
 
 impl Game {
+    pub fn deal(&mut self) -> Card {
+        self.deck.deal()
+    }
+
     pub fn new_deal(&mut self) {
         self.hand_done = false;
         self.player = Hand::new();
         self.dealer = Hand::new();
-        self.player.push(deal_card());
-        self.player.push(deal_card());
-        self.dealer.push(deal_card());
-        self.dealer.push(deal_card());
+        self.player.push(self.deck.deal());
+        self.player.push(self.deck.deal());
+        self.dealer.push(self.deck.deal());
+        self.dealer.push(self.deck.deal());
     }
 
     pub fn hit(&mut self) {
-        self.player.push(deal_card());
+        self.player.push(self.deck.deal());
         match self.player.total() {
             21 => self.stand(),
             22.. => self.hand_done = true,
@@ -31,7 +37,7 @@ impl Game {
 
     pub fn stand(&mut self) {
         while self.dealer.total() <= 16 {
-            self.dealer.push(deal_card());
+            self.dealer.push(self.deck.deal());
         }
         self.hand_done = true;
     }
@@ -81,17 +87,16 @@ impl Display for RoundResult {
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct Card(usize);
+#[derive(Clone, Eq, Hash, PartialEq)]
+pub struct Card {
+    suit: Suit,
+    rank: usize,
+}
 
 impl Display for Card {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ", self.0)
+        write!(f, "{}{} ", self.suit, self.rank)
     }
-}
-
-pub fn deal_card() -> Card {
-    Card(rand::thread_rng().gen_range(1..=10))
 }
 
 #[derive(Default)]
@@ -103,7 +108,7 @@ impl Hand {
     }
 
     pub fn total(&self) -> usize {
-        self.0.iter().fold(0, |total, next| total + next.0)
+        self.0.iter().fold(0, |total, next| total + next.rank)
     }
 
     pub fn push(&mut self, card: Card) {
@@ -118,3 +123,63 @@ impl Display for Hand {
     }
 }
 
+#[derive(Clone, Eq, Hash, PartialEq)]
+enum Suit {
+    Spades,
+    Clubs,
+    Diamonds,
+    Hearts,
+}
+
+impl Display for Suit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Suit::Spades => "♠",
+                Suit::Clubs => "♣",
+                Suit::Diamonds => "♦",
+                Suit::Hearts => "♥",
+            }
+        )
+    }
+}
+
+struct Deck(IntoIter<Card>);
+
+impl Deck {
+    pub fn deal(&mut self) -> Card {
+        self.0.next().expect("ran out of cards")
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl Default for Deck {
+    fn default() -> Self {
+        let mut cards = HashSet::with_capacity(52);
+        for rank in 1..=13 {
+            for suit in &[Suit::Spades, Suit::Clubs, Suit::Diamonds, Suit::Hearts] {
+                cards.insert(Card {
+                    suit: suit.clone(),
+                    rank,
+                });
+            }
+        }
+        Deck(cards.into_iter())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_deck_contains_52_cards() {
+        let deck = Deck::default();
+        assert_eq!(deck.len(), 52);
+    }
+}
