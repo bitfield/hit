@@ -33,16 +33,20 @@ impl Tui {
     }
 
     /// Runs the game in TUI mode.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Returns any errors from Ratatui.
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         loop {
             match self.phase {
                 Phase::Quitting => return Ok(()),
                 Phase::Starting => {
+                    self.phase = Phase::Playing;
                     self.game.new_deal();
+                    if self.game.hand_done {
+                        continue;
+                    }
                     self.message = Line::from(vec![
                         "<H>".yellow().bold(),
                         "it, ".into(),
@@ -51,7 +55,6 @@ impl Tui {
                         "<Q>".yellow().bold(),
                         " to quit".into(),
                     ]);
-                    self.phase = Phase::Playing;
                 }
                 Phase::Playing => {
                     if self.game.hand_done {
