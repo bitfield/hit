@@ -13,14 +13,14 @@ pub fn run() {
                 Action::Hit => {
                     let card = deal();
                     game.player.push(card);
-                },
+                }
                 Action::Stand => break,
             }
             println!("Player: {}", game.player);
         }
         while game.dealer.total() <= 16 {
             let card = deal();
-            game.dealer.push(card);        
+            game.dealer.push(card);
         }
 
         println!("Dealer: {}", game.dealer);

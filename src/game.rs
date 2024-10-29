@@ -2,16 +2,30 @@ use std::fmt::Display;
 
 use crate::cards::{deal, Hand};
 
-#[derive(Default)]
 pub struct Game {
+    pub money: usize,
+    pub bet: usize,
     pub player: Hand,
     pub dealer: Hand,
     pub hand_done: bool,
 }
 
+impl Default for Game {
+    fn default() -> Self {
+        Self {
+            money: 100,
+            bet: 5,
+            player: Hand::default(),
+            dealer: Hand::default(),
+            hand_done: false,
+        }
+    }
+}
+
 impl Game {
     pub fn new_deal(&mut self) {
         self.hand_done = false;
+        self.money = self.money.checked_sub(self.bet).expect("You're broke!");
         self.player = Hand::new();
         self.dealer = Hand::new();
         self.player.push(deal());
@@ -52,6 +66,20 @@ impl Game {
             RoundResult::DealerWins
         } else {
             RoundResult::Tie
+        }
+    }
+
+    pub fn update_money(&mut self) {
+        match self.round_result() {
+            RoundResult::Tie => self.money += self.bet,
+            RoundResult::PlayerWins | RoundResult::DealerBust => {
+                if self.player.total() == 21 {
+                    self.money += self.bet * 3;
+                } else {
+                    self.money += self.bet * 2;
+                }
+            }
+            _ => {}
         }
     }
 }
