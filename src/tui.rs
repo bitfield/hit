@@ -33,16 +33,20 @@ impl Tui {
     }
 
     /// Runs the game in TUI mode.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Returns any errors from Ratatui.
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         loop {
             match self.phase {
                 Phase::Quitting => return Ok(()),
                 Phase::Starting => {
+                    self.phase = Phase::Playing;
                     self.game.new_deal();
+                    if self.game.hand_done {
+                        continue;
+                    }
                     self.message = Line::from(vec![
                         "<H>".yellow().bold(),
                         "it, ".into(),
@@ -51,11 +55,11 @@ impl Tui {
                         "<Q>".yellow().bold(),
                         " to quit".into(),
                     ]);
-                    self.phase = Phase::Playing;
                 }
                 Phase::Playing => {
                     if self.game.hand_done {
                         let result = self.game.round_result();
+                        self.game.update_money();
                         self.message = Line::from(vec![
                             result.to_string().into(),
                             " Press any key to continue, or ".into(),
@@ -113,7 +117,16 @@ impl Widget for &Tui {
             .alignment(Alignment::Center)
             .render(dealer_hand_area, buf);
         Paragraph::new(self.game.player.to_string())
-            .block(Block::bordered().title(Title::from("Player").alignment(Alignment::Center)))
+            .block(
+                Block::bordered().title(
+                    Title::from(vec![
+                        "Player ($".into(),
+                        self.game.money.to_string().into(),
+                        ")".into(),
+                    ])
+                    .alignment(Alignment::Center),
+                ),
+            )
             .alignment(Alignment::Center)
             .render(player_hand_area, buf);
         Paragraph::new(self.message.clone())

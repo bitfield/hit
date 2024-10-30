@@ -1,48 +1,38 @@
 use std::io::{self, Write};
 
-use crate::game::{deal_card, Game};
+use crate::{cards::deal, game::Game};
 
 pub fn run() {
     let mut game = Game::default();
-    loop {
+    'game: loop {
         game.new_deal();
+        println!("Cash: {}", game.money);
         println!("Dealer: {}", game.dealer);
         println!("Player: {}", game.player);
         while game.player.total() < 21 {
             match prompt_for_action() {
-                Action::Hit => game.player.push(deal_card()),
+                Action::Hit => game.player.push(deal()),
                 Action::Stand => break,
+                Action::Quit => break 'game,
             }
             println!("Player: {}", game.player);
         }
         while game.dealer.total() <= 16 {
-            game.dealer.push(deal_card());
+            game.dealer.push(deal());
         }
-
         println!("Dealer: {}", game.dealer);
         println!("{}", game.round_result());
-        if !play_again() {
-            println!("Y'all come back real soon!");
-            return;
-        }
+        game.update_money();
     }
+    println!("Y'all come back real soon!");
 }
 
 fn prompt_for_action() -> Action {
     loop {
-        match get_player_input("(h)it or (s)tand?").as_str() {
-            "s" => return Action::Stand,
-            "h" => return Action::Hit,
-            _ => println!("Sorry, I'm not sure what you want to do."),
-        }
-    }
-}
-
-fn play_again() -> bool {
-    loop {
-        match get_player_input("Play again (y/n)?").as_str() {
-            "y" => return true,
-            "n" => return false,
+        match get_player_input("(H)it, (S)tand, or (Q)uit?").as_str() {
+            "s" | "S" => return Action::Stand,
+            "h" | "H" => return Action::Hit,
+            "q" | "Q" => return Action::Quit,
             _ => println!("Sorry, I'm not sure what you want to do."),
         }
     }
@@ -60,4 +50,5 @@ fn get_player_input(prompt: &'static str) -> String {
 enum Action {
     Stand,
     Hit,
+    Quit
 }

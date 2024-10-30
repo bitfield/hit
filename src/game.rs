@@ -1,27 +1,44 @@
 use std::fmt::Display;
 
-use rand::Rng;
+use crate::cards::{deal, Hand};
 
-#[derive(Default)]
 pub struct Game {
+    pub money: usize,
+    pub bet: usize,
     pub player: Hand,
     pub dealer: Hand,
     pub hand_done: bool,
 }
 
+impl Default for Game {
+    fn default() -> Self {
+        Self {
+            money: 100,
+            bet: 5,
+            player: Hand::default(),
+            dealer: Hand::default(),
+            hand_done: false,
+        }
+    }
+}
+
 impl Game {
     pub fn new_deal(&mut self) {
         self.hand_done = false;
+        self.money = self.money.checked_sub(self.bet).expect("You're broke!");
         self.player = Hand::new();
         self.dealer = Hand::new();
-        self.player.push(deal_card());
-        self.player.push(deal_card());
-        self.dealer.push(deal_card());
-        self.dealer.push(deal_card());
+        self.player.push(deal());
+        self.player.push(deal());
+        self.dealer.push(deal());
+        self.dealer.push(deal());
+        if self.player.total() >= 21 {
+            self.stand();
+        }
     }
 
     pub fn hit(&mut self) {
-        self.player.push(deal_card());
+        self.player.push(deal());
         match self.player.total() {
             21 => self.stand(),
             22.. => self.hand_done = true,
@@ -31,7 +48,7 @@ impl Game {
 
     pub fn stand(&mut self) {
         while self.dealer.total() <= 16 {
-            self.dealer.push(deal_card());
+            self.dealer.push(deal());
         }
         self.hand_done = true;
     }
@@ -49,6 +66,20 @@ impl Game {
             RoundResult::DealerWins
         } else {
             RoundResult::Tie
+        }
+    }
+
+    pub fn update_money(&mut self) {
+        match self.round_result() {
+            RoundResult::Tie => self.money += self.bet,
+            RoundResult::PlayerWins | RoundResult::DealerBust => {
+                if self.player.total() == 21 {
+                    self.money += self.bet * 3;
+                } else {
+                    self.money += self.bet * 2;
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -80,41 +111,3 @@ impl Display for RoundResult {
         write!(f, "{result_str}")
     }
 }
-
-#[derive(Copy, Clone)]
-pub struct Card(usize);
-
-impl Display for Card {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ", self.0)
-    }
-}
-
-pub fn deal_card() -> Card {
-    Card(rand::thread_rng().gen_range(1..=10))
-}
-
-#[derive(Default)]
-pub struct Hand(Vec<Card>);
-
-impl Hand {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn total(&self) -> usize {
-        self.0.iter().fold(0, |total, next| total + next.0)
-    }
-
-    pub fn push(&mut self, card: Card) {
-        self.0.push(card);
-    }
-}
-
-impl Display for Hand {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.iter().try_for_each(|card| write!(f, "{card}"))?;
-        write!(f, "(total {})", self.total())
-    }
-}
-
