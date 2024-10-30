@@ -24,7 +24,6 @@ pub fn run() {
         println!("{}", game.round_result());
         game.update_money();
     }
-    println!("Y'all come back real soon!");
 }
 
 fn prompt_for_action() -> Action {
