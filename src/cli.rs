@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use crate::{cards::deal, game::Game};
+use crate::game::Game;
 
 pub fn run() {
     let mut game = Game::default();
@@ -9,16 +9,16 @@ pub fn run() {
         println!("Cash: {}", game.money);
         println!("Dealer: {}", game.dealer);
         println!("Player: {}", game.player);
-        while game.player.total() < 21 {
+        while game.player.total().value < 21 {
             match prompt_for_action() {
-                Action::Hit => game.player.push(deal()),
+                Action::Hit => game.player.deal(),
                 Action::Stand => break,
                 Action::Quit => break 'game,
             }
             println!("Player: {}", game.player);
         }
-        while game.dealer.total() <= 16 {
-            game.dealer.push(deal());
+        while game.dealer.total().value <= 16 {
+            game.dealer.deal();
         }
         println!("Dealer: {}", game.dealer);
         println!("{}", game.round_result());
