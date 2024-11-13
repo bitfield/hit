@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::cards::{deal, Hand};
+use crate::cards::Hand;
 
 pub struct Game {
     pub money: usize,
@@ -28,18 +28,18 @@ impl Game {
         self.money = self.money.checked_sub(self.bet).expect("You're broke!");
         self.player = Hand::new();
         self.dealer = Hand::new();
-        self.player.push(deal());
-        self.player.push(deal());
-        self.dealer.push(deal());
-        self.dealer.push(deal());
-        if self.player.total() >= 21 {
+        self.player.deal();
+        self.player.deal();
+        self.dealer.deal();
+        self.dealer.deal();
+        if self.player.total().value >= 21 {
             self.stand();
         }
     }
 
     pub fn hit(&mut self) {
-        self.player.push(deal());
-        match self.player.total() {
+        self.player.deal();
+        match self.player.total().value {
             21 => self.stand(),
             22.. => self.hand_done = true,
             _ => {}
@@ -47,15 +47,15 @@ impl Game {
     }
 
     pub fn stand(&mut self) {
-        while self.dealer.total() <= 16 {
-            self.dealer.push(deal());
+        while self.dealer.total().value <= 16 {
+            self.dealer.deal();
         }
         self.hand_done = true;
     }
 
     pub fn round_result(&self) -> RoundResult {
-        let p = self.player.total();
-        let d = self.dealer.total();
+        let p = self.player.total().value;
+        let d = self.dealer.total().value;
         if p > 21 {
             RoundResult::PlayerBust
         } else if d > 21 {
@@ -73,7 +73,7 @@ impl Game {
         match self.round_result() {
             RoundResult::Tie => self.money += self.bet,
             RoundResult::PlayerWins | RoundResult::DealerBust => {
-                if self.player.total() == 21 {
+                if self.player.total().value == 21 {
                     self.money += self.bet * 3;
                 } else {
                     self.money += self.bet * 2;

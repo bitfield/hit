@@ -33,13 +33,6 @@ impl Display for Card {
     }
 }
 
-pub fn deal() -> Card {
-    Card {
-        rank: random(),
-        suit: random(),
-    }
-}
-
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub enum Suit {
     Spades,
@@ -130,6 +123,23 @@ impl Distribution<Rank> for Standard {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub struct Total {
+    pub value: usize,
+    soft: bool,
+}
+
+impl Display for Total {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {}",
+            if self.soft { "soft" } else { "total" },
+            self.value
+        )
+    }
+}
+
 #[derive(Default)]
 pub struct Hand(Vec<Card>);
 
@@ -138,20 +148,66 @@ impl Hand {
         Self::default()
     }
 
-    pub fn total(&self) -> usize {
-        self.0
-            .iter()
-            .fold(0, |total, next| total + next.rank.value())
+    pub fn total(&self) -> Total {
+        let mut total = Total {
+            value: self
+                .0
+                .iter()
+                .fold(0, |total, next| total + next.rank.value()),
+            soft: false,
+        };
+        if self.0.iter().any(|card| card.rank == Rank::Ace) && total.value <= 11 {
+            total.value += 10;
+            total.soft = true;
+        }
+        total
     }
 
-    pub fn push(&mut self, card: Card) {
-        self.0.push(card);
+    pub fn deal(&mut self) {
+        self.0.push(Card {
+            rank: random(),
+            suit: random(),
+        });
     }
 }
 
 impl Display for Hand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.iter().try_for_each(|card| write!(f, "{card}"))?;
-        write!(f, "(total {})", self.total())
+        write!(f, "({})", self.total())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn total_values_aces_as_11_unless_total_would_exceed_21() {
+        let mut hand = Hand::new();
+        add(&mut hand, Rank::Ace);
+        add(&mut hand, Rank::Five);
+        assert_eq!(
+            hand.total(),
+            Total {
+                value: 16,
+                soft: true
+            }
+        );
+        add(&mut hand, Rank::Ten);
+        assert_eq!(
+            hand.total(),
+            Total {
+                value: 16,
+                soft: false
+            }
+        );
+    }
+
+    fn add(hand: &mut Hand, rank: Rank) {
+        hand.0.push(Card {
+            suit: Suit::Spades,
+            rank,
+        });
     }
 }
